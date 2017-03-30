@@ -1,0 +1,17 @@
+---
+title: "Scrape"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+There is [an RSS feed](https://archive.org/services/collection-rss.php?collection=sovetskoe_foto) but it only returns the 50 most recent entries.
+
+```{r}
+read_xml('https://archive.org/services/collection-rss.php?collection=sovetskoe_foto') %>%
+  xml_find_all('//item') %>%
+  length
+```
