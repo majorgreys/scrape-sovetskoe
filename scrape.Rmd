@@ -6,12 +6,104 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(xml2)
+library(rvest)
+library(stringr)
 ```
 
-There is [an RSS feed](https://archive.org/services/collection-rss.php?collection=sovetskoe_foto) but it only returns the 50 most recent entries.
+The [sovetskoe-foto](https://archive.org/details/sovetskoe_foto) archive has [an RSS feed](https://archive.org/services/collection-rss.php?collection=sovetskoe_foto) but it only returns the 50 most recent entries.
 
 ```{r}
 read_xml('https://archive.org/services/collection-rss.php?collection=sovetskoe_foto') %>%
   xml_find_all('//item') %>%
   length
+```
+
+Nor can we pull down a list of all the items in the collection since Archive.org uses pagination (along with infinite scrolling) to split images up:
+
+```{r}
+read_html('https://archive.org/details/sovetskoe_foto') %>%
+  html_nodes('div.results>div.item-ia>div.C234>div.item-ttl>a') %>%
+  html_attr('href') %>%
+  head(10)
+```
+
+We will keep this scrape around for crawling individual pages for links to items:
+
+```{r}
+scrapeitems <- function(.) {
+  read_html(.) %>%
+    html_nodes('div.results>div.item-ia>div.C234>div.item-ttl>a') %>%
+    html_attr('href') %>%
+    paste0('https://archive.org', .)
+}
+```
+
+Having scraped the front index page for image items, we can now pull out of the HTML page for each image the link to the PDF we will want to download. There are actually two PDF links on the page, but we are only interested in the non-OCR'd version. 
+
+```{r}
+scrapepdf <- function(.) {
+  read_html(.) %>%
+    html_nodes('a.download-pill[href$=".pdf"]:not([href$="text.pdf"])') %>%
+    html_attr('href') %>%
+    paste0('https://archive.org', .)
+}
+scrapepdf('https://archive.org/details/sovphoto_v1_1992_05-06')
+```
+
+But we know there to be 455 images in the collection. Fortunately the HTML for the first page (and all subsequent pages other than the last one) includes a link to the next page:
+
+```{r}
+read_html('https://archive.org/details/sovetskoe_foto') %>% 
+  html_nodes('center.more_search>noscript>a') %>%
+  html_attr('href')
+```
+
+After the last page, naturally, the page does not include a link to the next page:
+
+```{r}
+read_html('https://archive.org/details/sovetskoe_foto?&sort=-downloads&page=8') %>% 
+  html_nodes('center.more_search>noscript>a') %>%
+  html_attr('href')
+```
+
+We then have to first build a list of all the page urls, which we can do by recursively calling a function that crawls the webpage, looking for the next page link until it cannot find anymore, returning the full list of links:
+
+```{r}
+crawlpage_rec <- function(.) {
+  a <- read_html(.) %>% 
+    html_nodes('center.more_search>noscript>a')
+  if((a %>% length) == 1) {
+    # recurse on page
+    href <- a %>%
+      html_attr('href')
+    c(., crawlpage_rec(paste0('https://archive.org', href)))
+  }
+  else {
+    # base
+    c()
+  }
+}
+crawlpage_rec('https://archive.org/details/sovetskoe_foto')
+```
+
+We can now combine `crawlpage`, `scrapeitems`, and `scrapepdf` to get a list of all PDFs we want to download (this takes a while to run):
+
+```{r}
+pdfurls <- crawlpage_rec('https://archive.org/details/sovetskoe_foto') %>%
+  map(scrapeitems) %>%
+  unlist %>%
+  map(scrapepdf) %>%
+  unlist
+```
+
+Finally, we can download all the PDFs to an output directory:
+
+```{r warning=FALSE}
+dir.create('output')
+downloadpdf <- function(.) {
+  download.file(., file.path('output', basename(.)))
+}
+pdfurls %>%
+  map(downloadpdf)
 ```
