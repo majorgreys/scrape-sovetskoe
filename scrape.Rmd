@@ -102,7 +102,11 @@ Finally, we can download all the PDFs to an output directory:
 ```{r warning=FALSE}
 dir.create('output')
 downloadpdf <- function(.) {
-  download.file(., file.path('output', basename(.)))
+  dest <- file.path('output', basename(.))
+  # download only if file doesn't already exist
+  if(!file.exists(dest)) {
+    download.file(., dest)
+  }
 }
 pdfurls %>%
   map(downloadpdf)
