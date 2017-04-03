@@ -90,9 +90,10 @@ crawlpage_rec('https://archive.org/details/sovetskoe_foto')
 We can now combine `crawlpage`, `scrapeitems`, and `scrapepdf` to get a list of all PDFs we want to download (this takes a while to run):
 
 ```{r}
-pdfurls <- crawlpage_rec('https://archive.org/details/sovetskoe_foto') %>%
+pages <- crawlpage_rec('https://archive.org/details/sovetskoe_foto') %>%
   map(scrapeitems) %>%
-  unlist %>%
+  unlist
+pdfurls <- pages %>%
   map(scrapepdf) %>%
   unlist
 ```
